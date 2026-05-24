@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 声音识别测试工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        h1 .emoji {
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .api-selector {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .api-selector label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .api-url-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .api-url-input input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .api-url-input button {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .api-url-input button:hover {
+            background: #45a049;
+        }
+        
+        .upload-area {
+            border: 3px dashed #ccc;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover, .upload-area.drag-over {
+            border-color: #667eea;
+            background: #f0f0ff;
+        }
+        
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .upload-hint {
+            color: #999;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .file-info {
+            background: #f5f5f5;
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .file-name {
+            color: #333;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        
+        .remove-file {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+            padding: 0 8px;
+        }
+        
+        .remove-file:hover {
+            color: #e74c3c;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 30px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 16px;
+            display: none;
+        }
+        
+        .result.success {
+            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+            border-left: 5px solid #4caf50;
+        }
+        
+        .result.error {
+            background: #ffebee;
+            border-left: 5px solid #f44336;
+        }
+        
+        .result-label {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .result-confidence {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .progress-bar {
+            background: #ddd;
+            border-radius: 10px;
+            height: 10px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+        
+        .top3 {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .top3-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #555;
+        }
+        
+        .top3-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        
+        .top3-label {
+            font-weight: 500;
+        }
+        
+        .top3-confidence {
+            color: #666;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .api-status {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .api-status.online {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .api-status.offline {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .api-status.checking {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        
+        footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+        }
+        
+        .example-btn {
+            background: #e0e0e0;
+            color: #333;
+            width: auto;
+            padding: 8px 16px;
+            margin: 5px;
+            font-size: 12px;
+            display: inline-block;
+        }
+        
+        .example-btn:hover {
+            background: #d0d0d0;
+            transform: none;
+        }
+        
+        .examples {
+            text-align: center;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <span class="emoji">🎵</span>
+            AI 声音识别测试工具
+        </h1>
+        <div class="subtitle">
+            上传音频文件，AI 会自动识别声音类型
+        </div>
+        
+        <div class="api-selector">
+            <label>🔗 API 地址</label>
+            <div class="api-url-input">
+                <input type="text" id="apiUrl" value="https://sound-ai-deploy-1.onrender.com" placeholder="API 地址">
+                <button id="checkApiBtn">检查连接</button>
+            </div>
+            <div style="font-size: 12px; color: #999; margin-top: 8px;">
+                💡 本地测试用 http://localhost:8000，线上用 https://sound-ai-deploy-1.onrender.com
+            </div>
+        </div>
+        
+        <div id="apiStatus" class="api-status checking">🔍 点击「检查连接」测试 API</div>
+        
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">点击或拖拽音频文件到此处</div>
+            <div class="upload-hint">支持 WAV, MP3, M4A, OGG 格式，最大 10MB</div>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*">
+        
+        <div class="file-info" id="fileInfo">
+            <span class="file-name" id="fileName"></span>
+            <button class="remove-file" id="removeFile">✕</button>
+        </div>
+        
+        <button id="predictBtn" disabled>🎯 开始识别</button>
+        
+        <div class="examples">
+            <span style="font-size: 12px; color: #999;">或者 </span>
+            <button class="example-btn" id="testDogBtn">🐕 测试狗叫</button>
+            <button class="example-btn" id="testBabyBtn">👶 测试婴儿哭</button>
+            <button class="example-btn" id="testClapBtn">👏 测试拍手</button>
+        </div>
+        
+        <div id="result" class="result"></div>
+        
+        <footer>
+            <span id="apiUrlDisplay"></span>
+        </footer>
+    </div>
+    
+    <script>
+        // 默认 API 地址
+        let API_BASE_URL = "https://sound-ai-deploy-1.onrender.com";
+        let API_URL = API_BASE_URL + "/detect_sound";
+        
+        let selectedFile = null;
+        
+        // DOM 元素
+        const apiUrlInput = document.getElementById('apiUrl');
+        const checkApiBtn = document.getElementById('checkApiBtn');
+        const apiStatusDiv = document.getElementById('apiStatus');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileNameSpan = document.getElementById('fileName');
+        const removeFileBtn = document.getElementById('removeFile');
+        const predictBtn = document.getElementById('predictBtn');
+        const resultDiv = document.getElementById('result');
+        const apiUrlDisplay = document.getElementById('apiUrlDisplay');
+        
+        // 示例测试文件（从数据集中获取）
+        const testFiles = {
+            dog: "../data/ESC-50/audio/1-100032-0-0.wav",
+            baby: "../data/ESC-50/audio/1-100032-0-0.wav",  // 需要替换为实际婴儿哭文件
+            clap: "../data/ESC-50/audio/1-100032-0-0.wav"    // 需要替换为实际拍手文件
+        };
+        
+        // 更新 API URL
+        function updateApiUrl() {
+            API_BASE_URL = apiUrlInput.value.trim();
+            API_URL = API_BASE_URL + "/detect_sound";
+            apiUrlDisplay.textContent = "API: " + API_BASE_URL;
+            // 清除之前的状态
+            apiStatusDiv.className = "api-status checking";
+            apiStatusDiv.textContent = "🔍 点击「检查连接」测试 API";
+        }
+        
+        // 检查 API 状态
+        async function checkAPIStatus() {
+            const baseUrl = apiUrlInput.value.trim();
+            const healthUrl = baseUrl + "/health";
+            
+            apiStatusDiv.className = "api-status checking";
+            apiStatusDiv.textContent = "⏳ 检查 API 连接中...";
+            
+            try {
+                const response = await fetch(healthUrl);
+                if (response.ok) {
+                    apiStatusDiv.textContent = '✅ API 已连接，服务正常运行';
+                    apiStatusDiv.className = 'api-status online';
+                    return true;
+                } else {
+                    throw new Error('API 响应异常');
+                }
+            } catch (error) {
+                apiStatusDiv.textContent = '❌ API 无法连接，请检查地址是否正确';
+                apiStatusDiv.className = 'api-status offline';
+                return false;
+            }
+        }
+        
+        // 上传区域点击
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+        
+        // 文件选择
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+        
+        // 处理文件选择
+        function handleFileSelect(file) {
+            const validTypes = ['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/m4a', 'audio/ogg'];
+            if (!validTypes.includes(file.type) && !file.name.match(/\.(wav|mp3|m4a|ogg)$/i)) {
+                alert('请选择音频文件（WAV, MP3, M4A, OGG）');
+                return;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) {
+                alert('文件不能超过 10MB');
+                return;
+            }
+            
+            selectedFile = file;
+            fileNameSpan.textContent = file.name;
+            fileInfo.style.display = 'flex';
+            predictBtn.disabled = false;
+        }
+        
+        // 移除文件
+        removeFileBtn.addEventListener('click', () => {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.style.display = 'none';
+            predictBtn.disabled = true;
+            resultDiv.style.display = 'none';
+        });
+        
+        // 预测
+        predictBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            
+            // 显示加载状态
+            predictBtn.disabled = true;
+            predictBtn.innerHTML = '<span class="loading"></span> 识别中...';
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = '<div class="progress-bar"><div class="progress-fill" style="width: 50%"></div></div><p style="text-align:center">正在分析音频...</p>';
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && !data.error) {
+                    displayResult(data);
+                } else {
+                    displayError(data.error || '识别失败');
+                }
+            } catch (error) {
+                displayError('网络错误：' + error.message);
+            } finally {
+                predictBtn.disabled = false;
+                predictBtn.innerHTML = '🎯 开始识别';
+            }
+        });
+        
+        // 显示结果
+        function displayResult(data) {
+            const confidencePercent = (data.confidence * 100).toFixed(1);
+            
+            // 获取图标
+            const labelIcon = getIconForLabel(data.label);
+            
+            let top3Html = '';
+            if (data.top3 && data.top3.length > 0) {
+                top3Html = '<div class="top3"><div class="top3-title">📊 Top 3 预测</div>';
+                for (let i = 0; i < data.top3.length; i++) {
+                    const item = data.top3[i];
+                    const percent = (item[1] * 100).toFixed(1);
+                    top3Html += `
+                        <div class="top3-item">
+                            <span class="top3-label">${i+1}. ${item[0]}</span>
+                            <span class="top3-confidence">${percent}%</span>
+                        </div>
+                    `;
+                }
+                top3Html += '</div>';
+            }
+            
+            resultDiv.className = 'result success';
+            resultDiv.innerHTML = `
+                <div class="result-label">
+                    <span>${labelIcon}</span>
+                    <span>${data.label}</span>
+                </div>
+                <div class="result-confidence">置信度: ${confidencePercent}%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: ${confidencePercent}%"></div>
+                </div>
+                ${top3Html}
+            `;
+        }
+        
+        function displayError(message) {
+            resultDiv.className = 'result error';
+            resultDiv.innerHTML = `
+                <div class="result-label">❌ 识别失败</div>
+                <div class="result-confidence">${message}</div>
+                <div style="margin-top:15px;font-size:14px;color:#666;">
+                    提示：请确保 API 服务正在运行，地址正确
+                </div>
+            `;
+        }
+        
+        function getIconForLabel(label) {
+            const icons = {
+                'dog': '🐕',
+                'children_playing': '👶',
+                'clapping': '👏',
+                'laughing': '😄',
+                'crying_baby': '👶😭',
+                'siren': '🚨',
+                'car_horn': '🚗',
+                'footsteps': '👣',
+                'snoring': '😴',
+                'sneezing': '🤧',
+                'coughing': '😷',
+                'thunderstorm': '⛈️',
+                'water_drops': '💧',
+                'toilet_flush': '🚽',
+                'vacuum_cleaner': '🧹',
+                'washing_machine': '🧺',
+            };
+            return icons[label] || '🎵';
+        }
+        
+        // 检查 API 按钮
+        checkApiBtn.addEventListener('click', async () => {
+            updateApiUrl();
+            await checkAPIStatus();
+        });
+        
+        // 示例测试（需要用户选择文件，因为浏览器安全限制）
+        document.getElementById('testDogBtn').addEventListener('click', () => {
+            alert('请点击上传区域选择狗叫的音频文件进行测试');
+            fileInput.click();
+        });
+        
+        document.getElementById('testBabyBtn').addEventListener('click', () => {
+            alert('请点击上传区域选择婴儿哭的音频文件进行测试');
+            fileInput.click();
+        });
+        
+        document.getElementById('testClapBtn').addEventListener('click', () => {
+            alert('请点击上传区域选择拍手的音频文件进行测试');
+            fileInput.click();
+        });
+        
+        // 初始化
+        updateApiUrl();
+        
+        // 自动检查 API 状态
+        setTimeout(async () => {
+            await checkAPIStatus();
+        }, 500);
+    </script>
+</body>
+</html>
