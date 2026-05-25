@@ -1,8 +1,18 @@
+# fastapi==0.115.6
+# uvicorn[standard]==0.34.0
+# python-multipart==0.0.20
+# numpy==1.26.4
+# librosa==0.10.2.post1
+# tensorflow==2.15.1
+# scipy==1.13.1
+# pydantic==2.10.4
+
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 numpy==1.26.4
 librosa==0.10.2.post1
-tensorflow==2.15.1
+tensorflow==2.16.1
 scipy==1.13.1
 pydantic==2.10.4
+h5py==3.11.0
