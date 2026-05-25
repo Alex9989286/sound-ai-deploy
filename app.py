@@ -122,6 +122,8 @@
 #     import uvicorn
 #     port = int(os.environ.get("PORT", 8000))
 #     uvicorn.run("app:app", host="0.0.0.0", port=port)
+
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -131,7 +133,6 @@ import uuid
 import numpy as np
 import librosa
 import tensorflow as tf
-from tensorflow.keras import layers, models, regularizers
 
 # ============================================
 # 配置
@@ -143,72 +144,29 @@ MODEL = None
 CLASSES = None
 
 # ============================================
-# 构建模型结构（与训练时完全一致）
-# ============================================
-def build_model():
-    """构建与训练时相同结构的模型"""
-    input_shape = (128, 248, 1)
-    num_classes = 15  # 根据你的 classes.npy 修改
-    
-    model = models.Sequential([
-        layers.Input(shape=input_shape),
-        
-        layers.Conv2D(32, (3, 3), activation='relu', padding='same',
-                      kernel_regularizer=regularizers.l2(0.001)),
-        layers.BatchNormalization(),
-        layers.MaxPooling2D(2),
-        
-        layers.Conv2D(64, (3, 3), activation='relu', padding='same',
-                      kernel_regularizer=regularizers.l2(0.001)),
-        layers.BatchNormalization(),
-        layers.MaxPooling2D(2),
-        
-        layers.Conv2D(128, (3, 3), activation='relu', padding='same',
-                      kernel_regularizer=regularizers.l2(0.001)),
-        layers.BatchNormalization(),
-        
-        layers.GlobalAveragePooling2D(),
-        
-        layers.Dropout(0.5),
-        layers.Dense(128, activation='relu',
-                     kernel_regularizer=regularizers.l2(0.001)),
-        layers.Dropout(0.5),
-        
-        layers.Dense(num_classes, activation='softmax')
-    ])
-    return model
-
-# ============================================
-# 加载模型
+# 加载模型 - 使用 SavedModel 格式 (最可靠)
 # ============================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global MODEL, CLASSES
-    print("🚀 Loading model...")
+    print("🚀 Loading model from SavedModel...")
+
+    # 直接加载整个 SavedModel 文件夹
+    # 这种方式同时加载了模型的结构和权重，不会有任何自定义对象的序列化问题
+    MODEL = tf.saved_model.load("saved_model")
     
-    # 重建模型结构
-    MODEL = build_model()
+    # 获取模型的推断函数
+    # 注意：SavedModel 加载后通常需要 .signatures 来调用，或者可以直接作为可调用对象
+    # 为了保持你原有的 MODEL.predict 调用方式，我们可以取默认的 serving 函数
+    MODEL = MODEL.signatures['serving_default']
     
-    # 加载权重
-    if os.path.exists("model_weights.weights.h5"):
-        MODEL.load_weights("model_weights.weights.h5")
-        print("✅ Weights loaded from model_weights.weights.h5")
-    elif os.path.exists("sound_class_model_mfcc_opt.keras"):
-        # 尝试从 .keras 提取权重
-        temp_model = tf.keras.models.load_model("sound_class_model_mfcc_opt.keras", compile=False)
-        MODEL.set_weights(temp_model.get_weights())
-        print("✅ Weights extracted from .keras file")
-    else:
-        print("❌ No weights found!")
-    
-    # 编译模型
-    MODEL.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-    
+    print("✅ Model loaded from SavedModel.")
+
     # 加载类别
     CLASSES = np.load("classes.npy", allow_pickle=True)
     print(f"✅ Classes loaded: {len(CLASSES)} classes")
     print(f"   Classes: {list(CLASSES)}")
-    
+
     yield
     print("🛑 Shutting down...")
 
@@ -224,9 +182,10 @@ app.add_middleware(
 )
 
 # ============================================
-# 特征提取
+# 特征提取 (与训练时一致)
 # ============================================
 def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, n_mels=128):
+    """提取特征，返回 float32"""
     y, sr = librosa.load(file_path, sr=sr, duration=5.0)
     
     if len(y) < sr * 5:
@@ -258,19 +217,6 @@ def extract_features(file_path, sr=22050, n_mfcc=40, max_len=128, n_mels=128):
     combined = combined.T[np.newaxis, ..., np.newaxis]
     return combined.astype(np.float32)
 
-# ============================================
-# API Endpoints
-# ============================================
-@app.get("/")
-def home():
-    return {
-        "status": "running",
-        "classes": list(CLASSES) if CLASSES is not None else []
-    }
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
 
 @app.post("/detect_sound")
 async def detect_sound(file: UploadFile = File(...)):
@@ -280,18 +226,26 @@ async def detect_sound(file: UploadFile = File(...)):
     temp_path = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}_{file.filename}")
     
     try:
+        # 保存上传的文件
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
+        # 提取特征
         features = extract_features(temp_path)
-        predictions = MODEL.predict(features, verbose=0)
         
-        idx = np.argmax(predictions[0])
-        confidence = float(np.max(predictions[0]))
+        # 使用 SavedModel 进行推理
+        # 注意：SavedModel 的 serving_default 函数要求输入是一个字典
+        predictions = MODEL(tf.constant(features))
+        # 输出也是一个字典，键通常是 'output_0' 或 'dense_1'，需要从中取出结果
+        pred_values = list(predictions.values())[0].numpy()
+        
+        idx = np.argmax(pred_values[0])
+        confidence = float(np.max(pred_values[0]))
         label = CLASSES[idx]
         
-        top3_idx = np.argsort(predictions[0])[-3:][::-1]
-        top3 = [(CLASSES[i], float(predictions[0][i])) for i in top3_idx]
+        # Top 3
+        top3_idx = np.argsort(pred_values[0])[-3:][::-1]
+        top3 = [(CLASSES[i], float(pred_values[0][i])) for i in top3_idx]
         
         return {
             "label": label,
@@ -305,6 +259,17 @@ async def detect_sound(file: UploadFile = File(...)):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+@app.get("/")
+def home():
+    return {
+        "status": "running",
+        "classes": list(CLASSES) if CLASSES is not None else []
+    }
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 if __name__ == "__main__":
     import uvicorn
