@@ -122,13 +122,13 @@
 #     import uvicorn
 #     port = int(os.environ.get("PORT", 8000))
 #     uvicorn.run("app:app", host="0.0.0.0", port=port)
-
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import shutil
 import os
 import uuid
+import json
 import numpy as np
 import librosa
 import tensorflow as tf
@@ -142,14 +142,15 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 
 MODEL = None
 CLASSES = None
-INPUT_SHAPE = (128, 248, 1)
-NUM_CLASSES = 18  # 根据你的 classes.npy 修改
 
 # ============================================
-# 重新构建模型结构（与训练时完全一致）
+# 构建模型结构（与训练时完全一致）
 # ============================================
-def build_model(input_shape, num_classes):
+def build_model():
     """构建与训练时相同结构的模型"""
+    input_shape = (128, 248, 1)
+    num_classes = 15  # 根据你的 classes.npy 修改
+    
     model = models.Sequential([
         layers.Input(shape=input_shape),
         
@@ -179,41 +180,62 @@ def build_model(input_shape, num_classes):
     return model
 
 # ============================================
-# 加载模型（使用权重方式，避免 custom_objects 问题）
+# 加载模型（优先使用 JSON + 权重）
 # ============================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global MODEL, CLASSES
     print("🚀 Loading model...")
     
-    # 方法1：如果有 .keras 文件且没有 custom_objects 问题
-    try:
-        MODEL = tf.keras.models.load_model(
-            "sound_class_model_mfcc_opt.keras",
-            compile=False  # 推理时不需要编译
-        )
-        print("✅ Model loaded from .keras file")
-    except Exception as e:
-        print(f"⚠️ Failed to load .keras: {e}")
-        print("🔄 Rebuilding model from weights...")
+    # 方法1：优先使用 JSON 结构 + 权重文件（最可靠）
+    if os.path.exists("model_architecture.json") and os.path.exists("model_weights.weights.h5"):
+        try:
+            print("📄 Loading model from JSON + weights...")
+            with open("model_architecture.json", "r") as f:
+                model_json = json.load(f)
+            MODEL = tf.keras.models.model_from_json(model_json)
+            MODEL.load_weights("model_weights.weights.h5")
+            print("✅ Model loaded from JSON + weights")
+        except Exception as e:
+            print(f"⚠️ Failed to load from JSON: {e}")
+            MODEL = None
+    
+    # 方法2：尝试直接加载 .keras 文件
+    if MODEL is None and os.path.exists("sound_class_model_mfcc_opt.keras"):
+        try:
+            print("📄 Loading model from .keras file...")
+            MODEL = tf.keras.models.load_model(
+                "sound_class_model_mfcc_opt.keras",
+                compile=False
+            )
+            print("✅ Model loaded from .keras file")
+        except Exception as e:
+            print(f"⚠️ Failed to load .keras: {e}")
+            MODEL = None
+    
+    # 方法3：重建模型并尝试提取权重
+    if MODEL is None:
+        print("🔄 Rebuilding model from scratch...")
+        MODEL = build_model()
         
-        # 方法2：重新构建模型并加载权重
-        MODEL = build_model(INPUT_SHAPE, NUM_CLASSES)
-        
-        # 尝试加载权重文件
         if os.path.exists("model_weights.weights.h5"):
             MODEL.load_weights("model_weights.weights.h5")
             print("✅ Weights loaded from model_weights.weights.h5")
         elif os.path.exists("sound_class_model_mfcc_opt.keras"):
-            # 从 .keras 文件提取权重（需要临时加载）
-            temp_model = tf.keras.models.load_model(
-                "sound_class_model_mfcc_opt.keras",
-                compile=False
-            )
-            MODEL.set_weights(temp_model.get_weights())
-            print("✅ Weights extracted from .keras file")
+            try:
+                temp_model = tf.keras.models.load_model(
+                    "sound_class_model_mfcc_opt.keras",
+                    compile=False
+                )
+                MODEL.set_weights(temp_model.get_weights())
+                print("✅ Weights extracted from .keras file")
+            except Exception as e:
+                print(f"❌ Failed to extract weights: {e}")
         else:
             print("❌ No model file found!")
+    
+    # 编译模型（推理时需要）
+    MODEL.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     
     # 加载类别
     CLASSES = np.load("classes.npy", allow_pickle=True)
