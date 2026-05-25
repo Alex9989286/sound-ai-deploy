@@ -287,7 +287,6 @@ import librosa
 import tensorflow as tf
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-import time
 
 # ============================================
 # 配置
@@ -295,8 +294,8 @@ import time
 TEMP_DIR = os.path.join(os.getcwd(), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# 处理超时时间（秒）- 超过此时间则放弃
-PROCESS_TIMEOUT = 12
+# 处理超时时间（秒）- 改为 20 秒
+PROCESS_TIMEOUT = 20
 
 # 线程池（用于隔离同步任务）
 executor = ThreadPoolExecutor(max_workers=2)
@@ -305,7 +304,7 @@ MODEL = None
 CLASSES = None
 
 # ============================================
-# 加载模型 - 使用 SavedModel 格式 (最可靠)
+# 加载模型 - 使用 SavedModel 格式
 # ============================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -400,7 +399,7 @@ def sync_process_audio(file_path: str):
 
 
 # ============================================
-# 检测端点（带超时控制）
+# 检测端点（带超时控制 - 20秒）
 # ============================================
 @app.post("/detect_sound")
 async def detect_sound(file: UploadFile = File(...)):
@@ -416,7 +415,6 @@ async def detect_sound(file: UploadFile = File(...)):
         
         # 在线程池中运行同步任务，并设置超时
         try:
-            # 使用 asyncio.to_thread 将同步任务放到线程池
             result = await asyncio.wait_for(
                 asyncio.to_thread(sync_process_audio, temp_path),
                 timeout=PROCESS_TIMEOUT
