@@ -295,7 +295,7 @@ TEMP_DIR = os.path.join(os.getcwd(), "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 # 处理超时时间（秒）- 改为 20 秒
-PROCESS_TIMEOUT = 130
+PROCESS_TIMEOUT = 30
 
 # 线程池（用于隔离同步任务）
 executor = ThreadPoolExecutor(max_workers=2)
