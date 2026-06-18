@@ -1,5 +1,23 @@
+# Python 虚拟环境
+venv/
+env/
+.venv/
+
+# Python 缓存
 __pycache__/
 *.pyc
-temp/
+
+# 模型文件（体积大，建议不提交）
+*.h5
+*.keras
+*.onnx
+*.pb
+saved_model_*/
+
+# IDE
+.vscode/
+.idea/
+
+# 系统文件
 .DS_Store
-*.log
+Thumbs.db
